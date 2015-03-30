@@ -128,10 +128,10 @@ static FILE *g_fs_debug;
 static const char file_name[] = "log_XXXXXX";
 static const char debug_file[] = "debug_XXXXXX";
 
-static inline int append_formatted_string_to_stream(const char *file, unsigned long line_no, FILE *fstream,
+inline int append_formatted_string_to_stream(const char *file, unsigned long line_no, FILE *fstream,
                                                     const char *fmt, ...) __attribute__((format(printf, 4, 5)));
 
-static inline int append_formatted_string_to_stream(const char *file, unsigned long line_no, FILE *fstream,
+inline int append_formatted_string_to_stream(const char *file, unsigned long line_no, FILE *fstream,
                                                     const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
