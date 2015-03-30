@@ -361,13 +361,29 @@ static int pass_all(int fd_in) {
             }
             if (FD_ISSET(STDOUT_FILENO, &writeset)) {
                 result = from_buffer_to_fd(&io_buf_2_read_slices[0], STDOUT_FILENO);
-                if (0 != result) {
+                if (0 == result) {
+                    FD_SET(fd_log, &writeset_copy);
+                    if (fd_log > maxfd) {
+                        maxfd = fd_log;
+                    }
+                } else {
                     quit = 1;
                 }
             }
             if (FD_ISSET(fd_log, &writeset)) {
                 result = from_buffer_to_fd(&io_buf_2_read_slices[1], fd_log);
-                if (0 != result) {
+                if (0 == result) {
+                    if (io_buf_2_read_slices[2].offset_read_ == io_buf_2->offset_write_) {
+                        FD_CLR(fd_log, &writeset_copy);
+			size_t idx;
+			maxfd = -1;
+			for (idx = 0; idx < FD_SETSIZE; ++idx) {
+			  if (FD_ISSET(idx, &writeset_copy) || FD_ISSET(idx, &readset_copy)) {
+			    maxfd = idx;
+			  }
+			}
+                    }
+                } else {
                     quit = 1;
                 }
             }
@@ -384,7 +400,6 @@ static int pass_all(int fd_in) {
             }
         } else {
         }
-        usleep(1000);
     }
     LOG_DEBUG(g_fs_debug, "%s stats: %llu %llu %llu %llu", "io_buf_1", io_buf_1->total_bytes_read_,
               io_buf_1->total_bytes_written_, io_buf_1->reads_count_, io_buf_1->writes_count_);
