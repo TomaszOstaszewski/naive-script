@@ -489,21 +489,23 @@ int main(int argc, char *argv[], char *envp[]) {
         LOG_DEBUG(g_fs_debug, "%d %s", errno, strerror(errno));
         exit(EXIT_FAILURE);
     } else if (cpid > 0) {
-        /* In the parent process */
-        int status;
-        int result;
-        LOG_DEBUG(g_fs_debug, "isatty(%d)=%d", master, isatty(master));
-        cfmakeraw(&stdin_data);
-        result = tcsetattr(STDIN_FILENO, TCSANOW, &stdin_data);
-        result = evutil_make_socket_nonblocking(STDIN_FILENO);
-        result = evutil_make_socket_nonblocking(STDOUT_FILENO);
-        result = evutil_make_socket_nonblocking(master);
-        if (0 == result) {
-            pass_all(master);
-            tcsetattr(STDIN_FILENO, TCSANOW, &stdin_data_copy);
-        }
-        waitpid(cpid, &status, 0);
-        exit(EXIT_SUCCESS);
+      /* In the parent process */
+      int status;
+      LOG_DEBUG(g_fs_debug, "isatty(%d)=%d", master, isatty(master));
+      cfmakeraw(&stdin_data);
+      if (0 == tcsetattr(STDIN_FILENO, TCSANOW, &stdin_data)
+	  && 0 == evutil_make_socket_nonblocking(STDIN_FILENO)
+	  && 0 == evutil_make_socket_nonblocking(STDOUT_FILENO)
+	  && 0 == evutil_make_socket_nonblocking(master)) {
+	pass_all(master);
+	tcsetattr(STDIN_FILENO, TCSANOW, &stdin_data_copy);
+	waitpid(cpid, &status, 0);
+	exit(EXIT_SUCCESS);
+      } else {
+	perror("parent ");
+	waitpid(cpid, &status, 0);
+	exit(EXIT_FAILURE);
+      }
     } else {
         perror("fork");
         exit(EXIT_FAILURE);
