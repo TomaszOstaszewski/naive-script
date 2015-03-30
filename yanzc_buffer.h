@@ -19,10 +19,15 @@
 struct io_buffer_t;
 
 typedef struct yanz_read_slice_t {
+    /**
+     * @brief
+     */
     unsigned long offset_read_;
+    /**
+     * @brief Pointer to the actual buffer
+     */
     struct io_buffer_t *buffer_;
 } yanz_read_slice_t;
-
 
 typedef struct io_buffer_t {
     unsigned long buf_size_;
@@ -48,13 +53,14 @@ struct io_buffer_t *io_buffer_new(unsigned int size) {
     return retval;
 }
 
-struct yanz_read_slice_t io_buffer_get_read_slice(struct io_buffer_t *io_buf, unsigned long initial_offset) {
+struct yanz_read_slice_t io_buffer_get_read_slice(struct io_buffer_t *io_buf,
+                                                  unsigned long initial_offset) {
     struct yanz_read_slice_t retval = {.offset_read_ = initial_offset, .buffer_ = io_buf};
     return retval;
 }
 
-int io_buffer_realign(struct io_buffer_t* io_buf, struct yanz_read_slice_t* read_slices,
-                                    size_t read_slices_size) {
+int io_buffer_realign(struct io_buffer_t *io_buf, struct yanz_read_slice_t *read_slices,
+                      size_t read_slices_size) {
     size_t idx;
     for (idx = 0; idx < read_slices_size; ++idx) {
         if (io_buf->offset_write_ != read_slices[idx].offset_read_) {
@@ -68,17 +74,21 @@ int io_buffer_realign(struct io_buffer_t* io_buf, struct yanz_read_slice_t* read
     return 1;
 }
 
-int io_buffer_is_space_for_writes(const struct io_buffer_t *p_buf) { return p_buf->buf_size_ > p_buf->offset_write_; }
+int io_buffer_is_space_for_writes(const struct io_buffer_t *p_buf) {
+    return p_buf->buf_size_ > p_buf->offset_write_;
+}
 
 unsigned long io_buffer_get_size_for_writes(const struct io_buffer_t *p_buf) {
     return p_buf->buf_size_ - p_buf->offset_write_;
 }
-void io_buffer_move_write_offset(struct io_buffer_t *p_buf, unsigned long by) { p_buf->offset_write_ += by; }
-uint8_t *io_buffer_get_buf_for_writes(struct io_buffer_t *p_buf) { return &p_buf->data_[p_buf->offset_write_]; }
+void io_buffer_move_write_offset(struct io_buffer_t *p_buf, unsigned long by) {
+    p_buf->offset_write_ += by;
+}
+uint8_t *io_buffer_get_buf_for_writes(struct io_buffer_t *p_buf) {
+    return &p_buf->data_[p_buf->offset_write_];
+}
 
-
-void yanz_read_slice_move_read_offset(struct yanz_read_slice_t *old_offset,
-                                                          unsigned long by) {
+void yanz_read_slice_move_read_offset(struct yanz_read_slice_t *old_offset, unsigned long by) {
     old_offset->offset_read_ += by;
 }
 

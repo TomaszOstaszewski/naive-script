@@ -1,14 +1,18 @@
 .DEFAULT_GOAL:=all
 .SECONDEXPANSION:
 
-CPPFLAGS	=-I~/include -MP -MMD -MF $(@D)/$(*).d -MT '$(@D)/$(*).d $(@D)/$(*).o $(@D)/$(*).S $(@D)/$(*).C'
+CPPFLAGS	=-MP -MMD -MF $(@D)/$(*).d -MT '$(@D)/$(*).d $(@D)/$(*).o $(@D)/$(*).S $(@D)/$(*).C'
 CFLAGS		:=-Wall -Wextra -Werror -O0 -ggdb
-LDFLAGS		:=-lutil -levent -Wl,-rpath=$(shell readlink -f ~/lib) -L ~/lib
+LDFLAGS		:=-lutil -levent -L/usr/local/lib
 
+CPPFLAGS	+=-I/usr/local/include
 BUILD_ROOT:=$(shell $(CC) -dumpmachine)/
 
 SOURCES:=pseudoshell.c
 OBJECTS:=$(addprefix $(BUILD_ROOT),$(SOURCES:%.c=%.o))
+DEPENDS:=$(OBJECTS:%.o=%.d)
+
+-include $(DEPENDS)
 
 .PHONY: all
 all: $(BUILD_ROOT)pseudoshell pseudoshell.tags
@@ -39,7 +43,6 @@ $(BUILD_ROOT)%.C: %.c
 $(BUILD_ROOT)%.S: %.c
 	$(CC) -S -o $(@) $(CPPFLAGS) $(<)
 
--include (
 
 .PHONY: clean
 clean:
