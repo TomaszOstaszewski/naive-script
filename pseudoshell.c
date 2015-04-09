@@ -384,6 +384,7 @@ static int pass_all(int fd_in) {
             }
         } else {
         }
+        usleep(1000);
     }
     LOG_DEBUG(g_fs_debug, "%s stats: %llu %llu %llu %llu", "io_buf_1", io_buf_1->total_bytes_read_,
               io_buf_1->total_bytes_written_, io_buf_1->reads_count_, io_buf_1->writes_count_);
