@@ -1,3 +1,5 @@
 /i586-linux-gnu/
 /html/
 /doxygen_sqlite3.db
+log_*
+debug_*
