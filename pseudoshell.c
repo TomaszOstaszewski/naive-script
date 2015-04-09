@@ -18,73 +18,72 @@
  * @tableofcontents
  * @section TheIntroduction Introduction - what it is all about.
  * The idea here is to create a simple application that saves all the conversation between a
- *computer
+ * computer
  * user and its terminal into a file. This sounds simple enough, but in reality can be a bit
- *challenging. @n
+ * challenging. @n
  * @section TheNaiveApproach A naive approach
  * A naive approach would be as follows:
  * -# Start this application; @n
  * Well, that's simple enough.
  * -# Create a bidirectional communication channel; @n
  * This can be a pair of sockets or a set of named pipes. The idea here is that this bidirectional
- *channel
+ * channel
  * allows 2 processes to communicate with each other.
  * -# <tt><a href="http://linux.die.net/man/3/fork">fork()</a></tt> current process; @n
  *    - In the parent process, run an function that forward everything form the standard input into
  * the communication channel, and then everything it has received from the communication channel
- *back to the
+ * back to the
  * standard output.
  *    - In the child process, close your standard input and standard output and replace them with
- *the endpoints
+ * the endpoints
  * from your communication channel. Then call your shell via <tt><a
- *href="http://linux.die.net/man/2/execve">execve()</a></tt>.
+ * href="http://linux.die.net/man/2/execve">execve()</a></tt>.
  *
  * @subsection TheNaiveApproachProblems Problems with the naive approach
  * This kind of application would run, but it can hardly be called a reliable work. Here's a short
- *list of problems with
+ * list of problems with
  * this kind of @a solution:
  * - launched shell does not have a prompt sign; @n
  * - some utilities like <tt><a href="http://linux.die.net/man/1/tty">tty(1)</a></tt> do not work
- *correctly.
- * - editors do not work correctly; @n Trying to launch editor like @c vi causes it to report that
- *standard output
+ * correctly.
+ * - editors do not work correctly; @n 
+ * Trying to launch editor like @c vi causes it to report that standard output
  * with all the resulting annoyances.
  *
  * All the problems above can be attributed to the fact that a standard input and a standard output
- *of a child shell
- * process are not terminal devices. Those are either <a
- *href="http://linux.die.net/man/2/socket">sockets<a>
- * or <a href="http://linux.die.net/man/7/pipe">pipes</a> or <a
- *href="http://linux.die.net/man/3/mkfifo">FIFO queues</a>.
- * The routine <tt><a href="http://linux.die.net/man/3/isatty">isatty()</a></tt> returns 0 for those
- * kind of descriptors. In order
- * for those programs to work correctly it is essential for their standard input and output to be
- *associated with a
- * a terminal device. @n Although a terminal device is represented by a file descriptor as well as
- *regular files,
- * but the set of operations available for terminals is quite different
- * than for regular files. For instance, by default terminals operate in the cooked mode, which
- *means
+ * of a child shell process are not terminal devices. Those are either 
+ * <a href="http://linux.die.net/man/2/socket">sockets<a>
+ * or <a href="http://linux.die.net/man/7/pipe">pipes</a>
+ * or <a href="http://linux.die.net/man/3/mkfifo">FIFO queues</a>.
+ * As a result, the special library function
+ * <tt><a href="http://linux.die.net/man/3/isatty">isatty()</a></tt> 
+ * returns 0 for those kind of descriptors, precluding any meaningful terminal work (no backspace
+ * available, no addresable cursor, no random screen position access and so on). @n
+ * In order for programs which require such features (editors like 
+ * <tt><a href="http://www.vim.org/">VIM</a></tt> or 
+ * <tt><a href="https://www.gnu.org/software/emacs/">GNU Emacs</a></tt>) to work correctly,
+ * it is essential for their standard input and output to be associated with a
+ * a terminal device. @n
+ * Although a terminal device is represented by a file descriptor just like regular files are, 
+ * the set of operations available for terminals is quite different
+ * than for regular files. 
+ * For instance, by default terminals operate in the cooked mode, which means
  * that they do not provide input until someone enters a newline character. In addition the
  * <tt><a href="http://man7.org/linux/man-pages/man2/ioctl.2.html">ioctl's()</a></tt> for terminals
- *are quite
- * different from those regular files.
+ * are quite different from those available to regular files.
  * @section TheImprovedApproach The improved approach
- * This time we are a bit smarter. We use <a href="http://linux.die.net/man/7/pty">pty(7)</a>
- *subsystem.
+ * This time we are a bit smarter. We use
+ * <a href="http://linux.die.net/man/7/pty">the pty subsystem</a>.
  * This allows us to create a @a pseudoterminal, which is a pair of file descriptors which are
- *indeed terminals.
- * Traditionally, we call those two elements of a pair a master and a slave end.
+ * indeed terminals.  Traditionally, we call those two elements of a pair a master and a slave end.
  * Everything written to one of the file descriptors appears on the other end as if it was typed on
- *a terminal.
- * So if you write an interrupt character (usually Ctrl+C) to a master part of the pseudoterminal,
- *all the processes
- * for which the slave part is a standard input will receive a <a
- *href="http://en.wikipedia.org/wiki/Unix_signal">SIGINT</a> signal.
+ * a terminal. So if you write an interrupt character (usually Ctrl+C) to a master part of the pseudoterminal,
+ * all the processes for which the slave part is a standard input will receive a 
+ * <a href="http://en.wikipedia.org/wiki/Unix_signal">SIGINT</a> signal.
  * This works both ways - anything typed on the slave part can be read by the master part. @n
  * So how can we use that facility? The basic plan is as follows:
- * -# Start the application and create a bidirectional communication channel; @n Plain and simple
- *just like
+ * -# Start the application and create a bidirectional communication channel; @n
+ * Plain and simple just like
  * @ref TheNaiveApproach "above".
  * -#
  * -#

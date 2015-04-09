@@ -1,5 +1,5 @@
 /**
- * @file yanz_buffer.h
+ * @file yanzc_buffer.h
  * @brief Yet Another Zero Copy Buffer
  * @details Header file for Yet Another Zero Copy Buffer
  * @author Tomasz Ostaszewski (ato013)
@@ -22,6 +22,7 @@ typedef struct yanz_read_slice_t {
     unsigned long offset_read_;
     struct io_buffer_t *buffer_;
 } yanz_read_slice_t;
+
 
 typedef struct io_buffer_t {
     unsigned long buf_size_;
