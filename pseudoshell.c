@@ -303,31 +303,19 @@ static int pass_all(int fd_in) {
     FD_ZERO(&writeset);
     FD_ZERO(&writeset_copy);
 
-    FD_SET(fd_log, &writeset_copy);
-    if (fd_log > maxfd) {
-        maxfd = fd_log;
-    }
-
     FD_SET(fd_in, &writeset_copy);
     FD_SET(fd_in, &readset_copy);
-    if (fd_in > maxfd) {
-        maxfd = fd_in;
-    }
-
-    FD_SET(STDOUT_FILENO, &writeset_copy);
-    if (STDOUT_FILENO > maxfd) {
-        maxfd = STDOUT_FILENO;
-    }
-
     FD_SET(STDIN_FILENO, &readset_copy);
-    if (STDIN_FILENO > maxfd) {
-        maxfd = STDIN_FILENO;
+
+    size_t idx;
+    maxfd = -1;
+    for (idx = 0; idx < FD_SETSIZE; ++idx) {
+        if (FD_ISSET(idx, &writeset_copy) || FD_ISSET(idx, &readset_copy)) {
+            maxfd = idx;
+        }
     }
-
-    ++maxfd;
-
     struct io_buffer_t *io_buf_1 = io_buffer_new(32);
-    struct io_buffer_t *io_buf_2 = io_buffer_new(8192);
+    struct io_buffer_t *io_buf_2 = io_buffer_new(4096);
 
     struct yanz_read_slice_t io_buf_1_read_slices[1] = {
         io_buffer_get_read_slice(io_buf_1, 0),
@@ -339,33 +327,43 @@ static int pass_all(int fd_in) {
         int result;
         memcpy(&readset, &readset_copy, sizeof(fd_set));
         memcpy(&writeset, &writeset_copy, sizeof(fd_set));
-        result = pselect(maxfd, &readset, &writeset, NULL, NULL, &blockset);
+        result = pselect(1+maxfd, &readset, &writeset, NULL, NULL, &blockset);
         if (result > 0) {
             if (FD_ISSET(STDIN_FILENO, &readset)) {
                 result = from_fd_to_buffer(STDIN_FILENO, io_buf_1);
-                if (0 != result) {
+                if (0 == result) {
+                    FD_SET(fd_log, &writeset_copy);
+                    FD_SET(fd_in, &writeset_copy);
+                } else {
                     quit = 1;
                 }
             }
             if (FD_ISSET(fd_in, &writeset)) {
                 result = from_buffer_to_fd(&io_buf_1_read_slices[0], fd_in);
-                if (0 != result) {
+                if (0 == result) {
+                    if (io_buf_1_read_slices[0].offset_read_ == io_buf_2->offset_write_) {
+                        FD_CLR(fd_in, &writeset_copy);
+                    }
+                } else {
                     quit = 1;
                 }
             }
             if (FD_ISSET(fd_in, &readset)) {
                 result = from_fd_to_buffer(fd_in, io_buf_2);
-                if (0 != result) {
+                if (0 == result) {
+                    FD_SET(STDOUT_FILENO, &writeset_copy);
+                }
+                else {
                     quit = 1;
                 }
             }
             if (FD_ISSET(STDOUT_FILENO, &writeset)) {
                 result = from_buffer_to_fd(&io_buf_2_read_slices[0], STDOUT_FILENO);
                 if (0 == result) {
-                    FD_SET(fd_log, &writeset_copy);
-                    if (fd_log > maxfd) {
-                        maxfd = fd_log;
+                    if (io_buf_2_read_slices[0].offset_read_ == io_buf_2->offset_write_) {
+                        FD_CLR(STDOUT_FILENO, &writeset_copy);
                     }
+                    FD_SET(fd_log, &writeset_copy);
                 } else {
                     quit = 1;
                 }
@@ -373,15 +371,8 @@ static int pass_all(int fd_in) {
             if (FD_ISSET(fd_log, &writeset)) {
                 result = from_buffer_to_fd(&io_buf_2_read_slices[1], fd_log);
                 if (0 == result) {
-                    if (io_buf_2_read_slices[2].offset_read_ == io_buf_2->offset_write_) {
+                    if (io_buf_2_read_slices[1].offset_read_ == io_buf_2->offset_write_) {
                         FD_CLR(fd_log, &writeset_copy);
-			size_t idx;
-			maxfd = -1;
-			for (idx = 0; idx < FD_SETSIZE; ++idx) {
-			  if (FD_ISSET(idx, &writeset_copy) || FD_ISSET(idx, &readset_copy)) {
-			    maxfd = idx;
-			  }
-			}
                     }
                 } else {
                     quit = 1;
@@ -391,6 +382,13 @@ static int pass_all(int fd_in) {
                               sizeof(io_buf_2_read_slices) / sizeof(io_buf_2_read_slices[0]));
             io_buffer_realign(io_buf_1, io_buf_1_read_slices,
                               sizeof(io_buf_1_read_slices) / sizeof(io_buf_1_read_slices[0]));
+            size_t idx;
+            maxfd = -1;
+            for (idx = 0; idx < FD_SETSIZE; ++idx) {
+                if (FD_ISSET(idx, &writeset_copy) || FD_ISSET(idx, &readset_copy)) {
+                    maxfd = idx;
+                }
+            }
         } else if (-1 == result) {
             if (EINTR == errno) {
                 continue;
