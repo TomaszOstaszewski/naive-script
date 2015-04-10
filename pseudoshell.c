@@ -109,7 +109,7 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
-#define _XOPEN_SOURCE
+
 #include <stdlib.h>
 #include <string.h>
 #include <sys/select.h>
@@ -121,76 +121,25 @@
 #include <unistd.h>
 
 #include "event2/event.h"
-#define BUFFSIZE 512
 #include "yanzc_buffer.h"
+#include "yandu_log.h"
+
+/**
+ * @brief Size of the data buffer that stores
+ * data to be sent to the child process.
+ */
+#define IO_TO_CHILD_BUFSIZE (32)
+
+/**
+ * @brief Size of the data buffer that stores
+ * data received from the child process.
+ */
+#define IO_FROM_CHILD_BUFSIZE (4096)
+
 static volatile sig_atomic_t quit = 0;
 static FILE *g_fs_debug;
 static const char file_name[] = "log_XXXXXX";
 static const char debug_file[] = "debug_XXXXXX";
-
-inline int append_formatted_string_to_stream(const char *file, unsigned long line_no, FILE *fstream,
-                                                    const char *fmt, ...) __attribute__((format(printf, 4, 5)));
-
-inline int append_formatted_string_to_stream(const char *file, unsigned long line_no, FILE *fstream,
-                                                    const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    time_t curr_time = time(NULL);
-    char time_buf[32] = {0};
-    ctime_r(&curr_time, &time_buf[0]);
-    char *newline = strrchr(time_buf, '\n');
-    if (newline) {
-        *newline = ' ';
-    }
-    if (fprintf(fstream, "%-30s %5.5lu %s : ", time_buf, line_no, file) > 0 && vfprintf(fstream, fmt, args) >= 0 &&
-        fputc('\n', fstream) && 0 == fflush(fstream) && 0 == fsync(fileno(fstream))) {
-        return 1;
-    }
-    return 0;
-}
-
-/**
- * @brief Creates a stream for logging debug output.
- * @details
- * @param[in] dbg_file_name_template
- * @return
- */
-FILE *open_debug_file(const char *dbg_file_name_template) {
-    FILE *fs_debug = NULL;
-    char *dbg_tmp_file_name = strdup(dbg_file_name_template);
-    int debug_fd = mkstemp(dbg_tmp_file_name);
-    if (debug_fd < 0) {
-        perror("mkstemp");
-    } else {
-        fs_debug = fdopen(debug_fd, "w");
-    }
-    free(dbg_tmp_file_name);
-    return fs_debug;
-}
-
-/**
- * @def LOG_DEBUG
- * @brief A helper macro that that sprinkles logs code execution artifacts
- * to an output stream.
- * @details Macro expansion depends on the type of build you have.
- * - In @c DEBUG builds it expands to a valid calls that appends a formatted string
- * to an @c fstream parameter.
- * - In @c NDEBUG builds it expands to nothing, no operation.
- */
-#if !defined NDEBUG
-
-#define LOG_DEBUG(fstream, ...)                                                                                        \
-    do {                                                                                                               \
-        append_formatted_string_to_stream(__func__, __LINE__, fstream, ##__VA_ARGS__);                                 \
-    } while (0)
-
-#else
-
-#define LOG_DEBUG(fstream, ...)                                                                                        \
-    do {                                                                                                               \
-    } while (0)
-
-#endif
 
 /**
  * @brief
@@ -208,55 +157,18 @@ static void handle_child(int signal, siginfo_t *info, void *context) {
     quit = 1;
 }
 
-int from_fd_to_buffer(int fd, struct io_buffer_t *io_buf) {
-    if (io_buffer_is_space_for_writes(io_buf)) {
-        int result = 0;
-        do {
-            result = read(fd, io_buffer_get_buf_for_writes(io_buf), io_buffer_get_size_for_writes(io_buf));
-        } while (-1 == result && EINTR == evutil_socket_geterror(fd));
-        if (result > 0) {
-            LOG_DEBUG(g_fs_debug, "%d %lu %lu", fd, (unsigned long)result, io_buffer_get_size_for_writes(io_buf));
-            io_buffer_move_write_offset(io_buf, (unsigned long)result);
-        } else if (-1 == result && EAGAIN == evutil_socket_geterror(fd)) {
-            return 0;
-        } else {
-            LOG_DEBUG(g_fs_debug, "%d %s", errno, strerror(errno));
-            return -1;
-        }
-    }
-    return 0;
-}
-
-int from_buffer_to_fd(struct yanz_read_slice_t *p_read_slice, int fd) {
-    if (yanz_read_slice_is_space_for_reads(p_read_slice)) {
-        int result = 0;
-        do {
-            result = write(fd, yanz_read_slice_get_buf(p_read_slice), yanz_read_slice_get_size_for_reads(p_read_slice));
-        } while (-1 == result && EINTR == evutil_socket_geterror(fd));
-        if (result > 0) {
-            LOG_DEBUG(g_fs_debug, "%d %lu %lu", fd, (unsigned long)result,
-                      yanz_read_slice_get_size_for_reads(p_read_slice));
-            yanz_read_slice_move_read_offset(p_read_slice, (unsigned long)result);
-        } else if (-1 == result && EAGAIN == evutil_socket_geterror(fd)) {
-            return 0;
-        } else {
-            LOG_DEBUG(g_fs_debug, "%d %s", errno, strerror(errno));
-            return errno;
-        }
-    }
-    return 0;
-}
-
 /**
  * @brief Master/slave communication routine.
  * @details
- * @param[in] fd_in
+ * @param[in] fd_in - handle of the master part of the pseudo terminal. @n
+ * We use this handle to read standard input of a child process and to write
+ * to its standard output.
  * @return
  */
 static int pass_all(int fd_in) {
     fd_set readset, readset_copy;
     fd_set writeset, writeset_copy;
-    int maxfd = 0;
+    int maxfd;
     int fd_log;
     sigset_t blockset;
 
@@ -266,12 +178,10 @@ static int pass_all(int fd_in) {
         perror("mkstemp");
         return -1;
     }
-    struct io_buffer_t *io_buf_1 = io_buffer_new(32);
-    struct io_buffer_t *io_buf_2 = io_buffer_new(4096);
+    struct yanzc_buffer_t *io_buf_1 = io_buffer_new(IO_TO_CHILD_BUFSIZE);
+    struct yanzc_buffer_t *io_buf_2 = io_buffer_new(IO_FROM_CHILD_BUFSIZE);
 
-    struct yanz_read_slice_t io_buf_1_read_slices[1] = {
-        io_buffer_get_read_slice(io_buf_1, 0),
-    };
+    struct yanz_read_slice_t io_buf_1_read_slice = io_buffer_get_read_slice(io_buf_1, 0);
     struct yanz_read_slice_t io_buf_2_read_slices[2] = {io_buffer_get_read_slice(io_buf_2, 0),
                                                         io_buffer_get_read_slice(io_buf_2, 0)};
 
@@ -351,9 +261,12 @@ static int pass_all(int fd_in) {
             /* Can we write the child processe's terminal? */
             if (FD_ISSET(fd_in, &writeset)) {
                 /* Copy data form the buffer 1 to this terminal */
-                result = from_buffer_to_fd(&io_buf_1_read_slices[0], fd_in);
+                result = from_buffer_to_fd(&io_buf_1_read_slice, fd_in);
                 if (0 == result) {
-                    if (io_buf_1_read_slices[0].offset_read_ == io_buf_2->offset_write_) {
+                    /* If all was written, then signal that we no longer need
+                     * to write to the standard master terminal.
+                     */
+                    if (io_buf_1_read_slice.offset_read_ == io_buf_2->offset_write_) {
                         FD_CLR(fd_in, &writeset_copy);
                     }
                 } else {
@@ -365,9 +278,9 @@ static int pass_all(int fd_in) {
                 /* Copy it to the buffer 2 */
                 result = from_fd_to_buffer(fd_in, io_buf_2);
                 if (0 == result) {
+                    /* Signal that we need to write to the standard output */
                     FD_SET(STDOUT_FILENO, &writeset_copy);
-                }
-                else {
+                } else {
                     quit = 1;
                 }
             }
@@ -377,6 +290,9 @@ static int pass_all(int fd_in) {
                 result = from_buffer_to_fd(&io_buf_2_read_slices[0], STDOUT_FILENO);
                 if (0 == result) {
                     if (io_buf_2_read_slices[0].offset_read_ == io_buf_2->offset_write_) {
+                        /* If all was written, then signal that we no longer need
+                         * to write to the standard output.
+                         */
                         FD_CLR(STDOUT_FILENO, &writeset_copy);
                     }
                     FD_SET(fd_log, &writeset_copy);
@@ -390,16 +306,18 @@ static int pass_all(int fd_in) {
                 result = from_buffer_to_fd(&io_buf_2_read_slices[1], fd_log);
                 if (0 == result) {
                     if (io_buf_2_read_slices[1].offset_read_ == io_buf_2->offset_write_) {
+                        /* If all was written, then signal that we no longer need
+                         * to write to the log file.
+                         */
                         FD_CLR(fd_log, &writeset_copy);
                     }
                 } else {
                     quit = 1;
                 }
             }
+            io_buffer_realign(io_buf_1, &io_buf_1_read_slice, 1);
             io_buffer_realign(io_buf_2, io_buf_2_read_slices,
                               sizeof(io_buf_2_read_slices) / sizeof(io_buf_2_read_slices[0]));
-            io_buffer_realign(io_buf_1, io_buf_1_read_slices,
-                              sizeof(io_buf_1_read_slices) / sizeof(io_buf_1_read_slices[0]));
         } else if (-1 == result) {
             if (EINTR == errno) {
                 continue;
@@ -410,10 +328,6 @@ static int pass_all(int fd_in) {
         } else {
         }
     } while (0 == quit);
-    LOG_DEBUG(g_fs_debug, "%s stats: %llu %llu %llu %llu", "io_buf_1", io_buf_1->total_bytes_read_,
-              io_buf_1->total_bytes_written_, io_buf_1->reads_count_, io_buf_1->writes_count_);
-    LOG_DEBUG(g_fs_debug, "%s stats: %llu %llu %llu %llu", "io_buf_2", io_buf_2->total_bytes_read_,
-              io_buf_2->total_bytes_written_, io_buf_2->reads_count_, io_buf_2->writes_count_);
     fsync(fd_log);
     close(fd_log);
     free(io_buf_1);

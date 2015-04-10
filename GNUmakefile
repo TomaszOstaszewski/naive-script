@@ -9,7 +9,7 @@ LDFLAGS		:=-lutil -levent -L/usr/local/lib
 CPPFLAGS	+=-I/usr/local/include
 BUILD_ROOT:=$(shell $(CC) -dumpmachine)/
 
-SOURCES:=pseudoshell.c
+SOURCES:=pseudoshell.c yandu_log.c
 OBJECTS:=$(addprefix $(BUILD_ROOT),$(SOURCES:%.c=%.o))
 DEPENDS:=$(OBJECTS:%.o=%.d)
 
