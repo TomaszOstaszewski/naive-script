@@ -46,27 +46,27 @@
  * - launched shell does not have a prompt sign; @n
  * - some utilities like <tt><a href="http://linux.die.net/man/1/tty">tty(1)</a></tt> do not work
  * correctly.
- * - editors do not work correctly; @n 
+ * - editors do not work correctly; @n
  * Trying to launch editor like @c vi causes it to report that standard output
  * with all the resulting annoyances.
  *
  * All the problems above can be attributed to the fact that a standard input and a standard output
- * of a child shell process are not terminal devices. Those are either 
+ * of a child shell process are not terminal devices. Those are either
  * <a href="http://linux.die.net/man/2/socket">sockets<a>
  * or <a href="http://linux.die.net/man/7/pipe">pipes</a>
  * or <a href="http://linux.die.net/man/3/mkfifo">FIFO queues</a>.
  * As a result, the special library function
- * <tt><a href="http://linux.die.net/man/3/isatty">isatty()</a></tt> 
+ * <tt><a href="http://linux.die.net/man/3/isatty">isatty()</a></tt>
  * returns 0 for those kind of descriptors, precluding any meaningful terminal work (no backspace
  * available, no addresable cursor, no random screen position access and so on). @n
- * In order for programs which require such features (editors like 
- * <tt><a href="http://www.vim.org/">VIM</a></tt> or 
+ * In order for programs which require such features (editors like
+ * <tt><a href="http://www.vim.org/">VIM</a></tt> or
  * <tt><a href="https://www.gnu.org/software/emacs/">GNU Emacs</a></tt>) to work correctly,
  * it is essential for their standard input and output to be associated with a
  * a terminal device. @n
- * Although a terminal device is represented by a file descriptor just like regular files are, 
+ * Although a terminal device is represented by a file descriptor just like regular files are,
  * the set of operations available for terminals is quite different
- * than for regular files. 
+ * than for regular files.
  * For instance, by default terminals operate in the cooked mode, which means
  * that they do not provide input until someone enters a newline character. In addition the
  * <tt><a href="http://man7.org/linux/man-pages/man2/ioctl.2.html">ioctl's()</a></tt> for terminals
@@ -78,7 +78,7 @@
  * indeed terminals.  Traditionally, we call those two elements of a pair a master and a slave end.
  * Everything written to one of the file descriptors appears on the other end as if it was typed on
  * a terminal. So if you write an interrupt character (usually Ctrl+C) to a master part of the pseudoterminal,
- * all the processes for which the slave part is a standard input will receive a 
+ * all the processes for which the slave part is a standard input will receive a
  * <a href="http://en.wikipedia.org/wiki/Unix_signal">SIGINT</a> signal.
  * This works both ways - anything typed on the slave part can be read by the master part. @n
  * So how can we use that facility? The basic plan is as follows:
@@ -303,10 +303,10 @@ static int pass_all(int fd_in) {
 
     /* Main loop
      * We multiplex between a number of file descriptors:
-     * - we read from the standard input and we pass it unaltered to the 
+     * - we read from the standard input and we pass it unaltered to the
      * master fd (passed as an argument to this function).
      * - we read form the master fd;
-     * - whatever is read from the master fd is then logged to a file, 
+     * - whatever is read from the master fd is then logged to a file,
      * as well as written to the standard output.
      *
      * A child process gets a slave part of the same "pseudoterminal".
@@ -333,16 +333,24 @@ static int pass_all(int fd_in) {
         /* Do the multiplexing */
         result = pselect(maxfd, &readset, &writeset, NULL, NULL, &blockset);
         if (result > 0) {
+            /* Is there something to read from standard input? */
             if (FD_ISSET(STDIN_FILENO, &readset)) {
+                /* Copy it to the buffer 1 */
                 result = from_fd_to_buffer(STDIN_FILENO, io_buf_1);
                 if (0 == result) {
+                    /* Signal that buffer 1 can be copied:
+                     * - to the log file
+                     * - to the master part of the pseudo terminal.
+                     */
                     FD_SET(fd_log, &writeset_copy);
                     FD_SET(fd_in, &writeset_copy);
                 } else {
                     quit = 1;
                 }
             }
+            /* Can we write the child processe's terminal? */
             if (FD_ISSET(fd_in, &writeset)) {
+                /* Copy data form the buffer 1 to this terminal */
                 result = from_buffer_to_fd(&io_buf_1_read_slices[0], fd_in);
                 if (0 == result) {
                     if (io_buf_1_read_slices[0].offset_read_ == io_buf_2->offset_write_) {
@@ -352,7 +360,9 @@ static int pass_all(int fd_in) {
                     quit = 1;
                 }
             }
+            /* Is there something to read from child's processes terminal? */
             if (FD_ISSET(fd_in, &readset)) {
+                /* Copy it to the buffer 2 */
                 result = from_fd_to_buffer(fd_in, io_buf_2);
                 if (0 == result) {
                     FD_SET(STDOUT_FILENO, &writeset_copy);
@@ -361,7 +371,9 @@ static int pass_all(int fd_in) {
                     quit = 1;
                 }
             }
+            /* Can we write to the standard output? */
             if (FD_ISSET(STDOUT_FILENO, &writeset)) {
+                /* Copy data form the buffer 2 to the standard output */
                 result = from_buffer_to_fd(&io_buf_2_read_slices[0], STDOUT_FILENO);
                 if (0 == result) {
                     if (io_buf_2_read_slices[0].offset_read_ == io_buf_2->offset_write_) {
@@ -372,7 +384,9 @@ static int pass_all(int fd_in) {
                     quit = 1;
                 }
             }
+            /* Can we write to the log file? */
             if (FD_ISSET(fd_log, &writeset)) {
+                /* Copy data form the buffer 2 to the log file */
                 result = from_buffer_to_fd(&io_buf_2_read_slices[1], fd_log);
                 if (0 == result) {
                     if (io_buf_2_read_slices[1].offset_read_ == io_buf_2->offset_write_) {
@@ -478,8 +492,7 @@ int main(int argc, char *argv[], char *envp[]) {
     /*
      * Nobody knows how much space should be reserved for name.
      * Therefore, we pass NULL for the 'name' parameter, as this is the only secure value we can
-     * pass.
-     * We also do not do anyting special about the slave part of the terminal,
+     * pass. We also do not do anyting special about the slave part of the terminal,
      * we are quite happy with the default settings, hence NULL for 'term' parameter.
      */
     pid_t cpid = forkpty(&master, NULL, NULL, &win_size);
@@ -499,23 +512,23 @@ int main(int argc, char *argv[], char *envp[]) {
         LOG_DEBUG(g_fs_debug, "%d %s", errno, strerror(errno));
         exit(EXIT_FAILURE);
     } else if (cpid > 0) {
-      /* In the parent process */
-      int status;
-      LOG_DEBUG(g_fs_debug, "isatty(%d)=%d", master, isatty(master));
-      cfmakeraw(&stdin_data);
-      if (0 == tcsetattr(STDIN_FILENO, TCSANOW, &stdin_data)
-	  && 0 == evutil_make_socket_nonblocking(STDIN_FILENO)
-	  && 0 == evutil_make_socket_nonblocking(STDOUT_FILENO)
-	  && 0 == evutil_make_socket_nonblocking(master)) {
-	pass_all(master);
-	tcsetattr(STDIN_FILENO, TCSANOW, &stdin_data_copy);
-	waitpid(cpid, &status, 0);
-	exit(EXIT_SUCCESS);
-      } else {
-	perror("parent ");
-	waitpid(cpid, &status, 0);
-	exit(EXIT_FAILURE);
-      }
+        /* In the parent process */
+        int status;
+        LOG_DEBUG(g_fs_debug, "isatty(%d)=%d", master, isatty(master));
+        cfmakeraw(&stdin_data);
+        if (0 == tcsetattr(STDIN_FILENO, TCSANOW, &stdin_data)
+            && 0 == evutil_make_socket_nonblocking(STDIN_FILENO)
+            && 0 == evutil_make_socket_nonblocking(STDOUT_FILENO)
+            && 0 == evutil_make_socket_nonblocking(master)) {
+            pass_all(master);
+            tcsetattr(STDIN_FILENO, TCSANOW, &stdin_data_copy);
+            waitpid(cpid, &status, 0);
+            exit(EXIT_SUCCESS);
+        } else {
+            perror("parent ");
+            waitpid(cpid, &status, 0);
+            exit(EXIT_FAILURE);
+        }
     } else {
         perror("fork");
         exit(EXIT_FAILURE);
