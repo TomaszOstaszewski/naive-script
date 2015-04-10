@@ -266,21 +266,15 @@ static int pass_all(int fd_in) {
         perror("mkstemp");
         return -1;
     }
+    struct io_buffer_t *io_buf_1 = io_buffer_new(32);
+    struct io_buffer_t *io_buf_2 = io_buffer_new(4096);
 
-    /* Main loop
-     * We multiplex between two inputs - the 0 (zero) file descriptor, zero_fd for short
-     * form the standard input of the parent process,
-     * and 'master_fd' which is the master part of the pseudoterminal.
-     * The slave process gets a slave part of the same "pseudoterminal".
-     * Whatever the slave process writes on its slave part, we read it on the master_fd file
-     * descriptor and then we write it to the standard output.
-     * Whatever the user types onto the standard inputs, we just write it to the master part of the
-     * pseudo-terminal.
-     * We do not need to write it onto the standard output as well. In fact, it would be a harmful
-     * thing to do, as you would see all the characters typen twice.
-     * The slave part is probably in a cooked mode, in which it echos all the characters being
-     * typed.
-     */
+    struct yanz_read_slice_t io_buf_1_read_slices[1] = {
+        io_buffer_get_read_slice(io_buf_1, 0),
+    };
+    struct yanz_read_slice_t io_buf_2_read_slices[2] = {io_buffer_get_read_slice(io_buf_2, 0),
+                                                        io_buffer_get_read_slice(io_buf_2, 0)};
+
     /* Set SIGCHLD handler */
     struct sigaction sa = {.sa_handler = NULL, .sa_flags = SA_SIGINFO};
     sa.sa_sigaction = handle_child;
@@ -307,27 +301,37 @@ static int pass_all(int fd_in) {
     FD_SET(fd_in, &readset_copy);
     FD_SET(STDIN_FILENO, &readset_copy);
 
-    size_t idx;
-    maxfd = -1;
-    for (idx = 0; idx < FD_SETSIZE; ++idx) {
-        if (FD_ISSET(idx, &writeset_copy) || FD_ISSET(idx, &readset_copy)) {
-            maxfd = idx;
-        }
-    }
-    struct io_buffer_t *io_buf_1 = io_buffer_new(32);
-    struct io_buffer_t *io_buf_2 = io_buffer_new(4096);
-
-    struct yanz_read_slice_t io_buf_1_read_slices[1] = {
-        io_buffer_get_read_slice(io_buf_1, 0),
-    };
-    struct yanz_read_slice_t io_buf_2_read_slices[2] = {io_buffer_get_read_slice(io_buf_2, 0),
-                                                        io_buffer_get_read_slice(io_buf_2, 0)};
-
-    while (0 == quit) {
+    /* Main loop
+     * We multiplex between a number of file descriptors:
+     * - we read from the standard input and we pass it unaltered to the 
+     * master fd (passed as an argument to this function).
+     * - we read form the master fd;
+     * - whatever is read from the master fd is then logged to a file, 
+     * as well as written to the standard output.
+     *
+     * A child process gets a slave part of the same "pseudoterminal".
+     * The slave part of the pseudo terminal pair is left in its default mode,
+     * which is probably a good thing.
+     */
+    do {
         int result;
+        /* Copy descriptor sets */
         memcpy(&readset, &readset_copy, sizeof(fd_set));
         memcpy(&writeset, &writeset_copy, sizeof(fd_set));
-        result = pselect(1+maxfd, &readset, &writeset, NULL, NULL, &blockset);
+        /* Find the maximum fd */
+        int idx;
+        maxfd = 0;
+        for (idx = 0; idx < FD_SETSIZE; ++idx) {
+            if (FD_ISSET(idx, &writeset_copy) || FD_ISSET(idx, &readset_copy)) {
+                if (maxfd < idx) {
+                    maxfd = idx;
+                }
+            }
+        }
+        ++maxfd;
+
+        /* Do the multiplexing */
+        result = pselect(maxfd, &readset, &writeset, NULL, NULL, &blockset);
         if (result > 0) {
             if (FD_ISSET(STDIN_FILENO, &readset)) {
                 result = from_fd_to_buffer(STDIN_FILENO, io_buf_1);
@@ -382,13 +386,6 @@ static int pass_all(int fd_in) {
                               sizeof(io_buf_2_read_slices) / sizeof(io_buf_2_read_slices[0]));
             io_buffer_realign(io_buf_1, io_buf_1_read_slices,
                               sizeof(io_buf_1_read_slices) / sizeof(io_buf_1_read_slices[0]));
-            size_t idx;
-            maxfd = -1;
-            for (idx = 0; idx < FD_SETSIZE; ++idx) {
-                if (FD_ISSET(idx, &writeset_copy) || FD_ISSET(idx, &readset_copy)) {
-                    maxfd = idx;
-                }
-            }
         } else if (-1 == result) {
             if (EINTR == errno) {
                 continue;
@@ -398,7 +395,7 @@ static int pass_all(int fd_in) {
             }
         } else {
         }
-    }
+    } while (0 == quit);
     LOG_DEBUG(g_fs_debug, "%s stats: %llu %llu %llu %llu", "io_buf_1", io_buf_1->total_bytes_read_,
               io_buf_1->total_bytes_written_, io_buf_1->reads_count_, io_buf_1->writes_count_);
     LOG_DEBUG(g_fs_debug, "%s stats: %llu %llu %llu %llu", "io_buf_2", io_buf_2->total_bytes_read_,
