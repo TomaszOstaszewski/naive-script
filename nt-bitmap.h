@@ -32,6 +32,10 @@
  * @details This definition hides the actual layout of the bitmap from its clients.
  */
 typedef struct nt_bitmap* nt_bitmap_t;
+
+/**
+ * @brief A helper macro for opaque const pointer.
+ */
 typedef const struct nt_bitmap* nt_bitmap_t_c;
 
 /**
@@ -99,6 +103,14 @@ unsigned long nt_bitmap_set(nt_bitmap_t a_bitmap, unsigned short idx);
  * @return Returns number of bits held in the underlying bitmap.
  */
 unsigned short nt_bitmap_size(nt_bitmap_t_c a_bitmap);
+
+
+/**
+ * @def NT_BITMAP_DUMP
+ * @details A helper macro that dumps a bitmap to a file stream.
+ * @param bmp
+ * @param sink
+ */
 
 #if defined DEBUG
 #include <stdio.h>

@@ -25,6 +25,9 @@
  * @{
  */
 
+/**
+ * @brief A data structure that represents bitmap.
+ */
 struct nt_bitmap {
     unsigned short size_;     /**< Number of bits in the bitmap */
     unsigned long bitmap_[0]; /**< Array of bits from the bitmap */

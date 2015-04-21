@@ -8,6 +8,7 @@
  * @par History
  * <pre>
  * </pre>
+ * @}
  */
 #ifndef NT_VIS_H
 #define NT_VIS_H
