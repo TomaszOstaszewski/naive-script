@@ -1,18 +1,40 @@
 /**
+ * @addtogroup yandu_log_module
+ * @{
  * @file   yandu_log.c
  * @author tomek <tomek@debian.tofuufot.org>
  * @date   Fri Apr 10 23:50:42 2015
  * 
  * @brief  
  * 
- * 
+ * @}
  */
 
 #include "yandu_log.h"
-
 #include <stddef.h>
 
-#if defined DEBUG
+/**
+ * @addtogroup yandu_log_module
+ * @{
+ */
+
+#if !defined NDEBUG
+#include <pthread.h>
+#include <unistd.h>
+#include <stdarg.h>
+#include <string.h>
+#include <stdlib.h>
+
+static const char s_debug_file_template[] = "debug_XXXXXX";
+static FILE* g_default_log_stream;
+
+static void atexit_close(void) {
+    if (NULL != g_default_log_stream) {
+        fsync(fileno(g_default_log_stream));
+        fclose(g_default_log_stream);
+        g_default_log_stream = NULL;
+    }
+}
 
 int append_formatted_string_to_stream(const char *file, unsigned long line_no, FILE *fstream,
                                       const char *fmt, ...) {
@@ -38,14 +60,22 @@ FILE *open_debug_file(const char *dbg_file_name_template) {
     FILE *fs_debug = NULL;
     char *dbg_tmp_file_name = strdup(dbg_file_name_template);
     int debug_fd = mkstemp(dbg_tmp_file_name);
-    if (debug_fd < 0) {
-        perror("mkstemp");
-    } else {
+    if (debug_fd >= 0) {
         fs_debug = fdopen(debug_fd, "w");
+    } else {
+        perror("mkstemp");
     }
     free(dbg_tmp_file_name);
     return fs_debug;
 }
+
+FILE* get_default_log_stream(void) {
+    if (NULL == g_default_log_stream) {
+        g_default_log_stream = open_debug_file(s_debug_file_template);
+        atexit(&atexit_close);
+    }
+    return g_default_log_stream;
+}        
 
 #else
 
@@ -63,4 +93,10 @@ FILE *open_debug_file(const char *dbg_file_name_template) {
     return NULL;
 }
 
+FILE* get_default_log_stream(void) { return NULL; }
+
 #endif
+
+/**
+ * @}
+ */

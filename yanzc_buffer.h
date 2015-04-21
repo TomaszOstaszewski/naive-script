@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "yandu_log.h"
 
 struct io_buffer_t;
 
@@ -97,9 +98,11 @@ int io_buffer_is_space_for_writes(const struct yanzc_buffer_t *p_buf) {
 unsigned long io_buffer_get_size_for_writes(const struct yanzc_buffer_t *p_buf) {
     return p_buf->buf_size_ - p_buf->offset_write_;
 }
+
 void io_buffer_move_write_offset(struct yanzc_buffer_t *p_buf, unsigned long by) {
     p_buf->offset_write_ += by;
 }
+
 uint8_t *io_buffer_get_buf_for_writes(struct yanzc_buffer_t *p_buf) {
     return &p_buf->data_[p_buf->offset_write_];
 }

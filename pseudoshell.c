@@ -137,9 +137,7 @@
 #define IO_FROM_CHILD_BUFSIZE (4096)
 
 static volatile sig_atomic_t quit = 0;
-static FILE *g_fs_debug;
 static const char file_name[] = "log_XXXXXX";
-static const char debug_file[] = "debug_XXXXXX";
 
 /**
  * @brief
@@ -149,7 +147,7 @@ static const char debug_file[] = "debug_XXXXXX";
  * @param context
  */
 static void handle_child(int signal, siginfo_t *info, void *context) {
-    LOG_DEBUG(g_fs_debug, "%d %p %p", signal, info, context);
+    LOG_DEBUG("%d %p %p", signal, info, context);
     /* Those declarations below fend off compiler warnings about unused variables */
     (void)(signal);
     (void)(info);
@@ -200,7 +198,7 @@ static int pass_all(int fd_in) {
     sigfillset(&blockset);
     sigdelset(&blockset, SIGCHLD);
 
-    LOG_DEBUG(g_fs_debug, "%ld", (long int)quit);
+    LOG_DEBUG("%ld", (long int)quit);
 
     FD_ZERO(&readset);
     FD_ZERO(&readset_copy);
@@ -322,7 +320,7 @@ static int pass_all(int fd_in) {
             if (EINTR == errno) {
                 continue;
             } else {
-                LOG_DEBUG(g_fs_debug, "%d %s", errno, strerror(errno));
+                LOG_DEBUG("%d %s", errno, strerror(errno));
                 break;
             }
         } else {
@@ -333,7 +331,7 @@ static int pass_all(int fd_in) {
     free(io_buf_1);
     free(io_buf_2);
     free(log_file_name);
-    LOG_DEBUG(g_fs_debug, "%d", (int)quit);
+    LOG_DEBUG("%d", (int)quit);
     return -1;
 }
 
@@ -379,13 +377,12 @@ int main(int argc, char *argv[], char *envp[]) {
     struct termios stdin_data, stdin_data_copy;
     struct winsize win_size;
     sigset_t blockset, orig_set;
-    g_fs_debug = open_debug_file(debug_file);
 
     if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {
         perror("isatty");
         exit(EXIT_FAILURE);
     }
-    LOG_DEBUG(g_fs_debug, "%s", ttyname(STDIN_FILENO));
+    LOG_DEBUG("%s", ttyname(STDIN_FILENO));
 
     if (0 != ioctl(STDIN_FILENO, TIOCGWINSZ, &win_size) || 0 != tcgetattr(STDIN_FILENO, &stdin_data)) {
         perror("ioctl || tcgetattr");
@@ -412,23 +409,23 @@ int main(int argc, char *argv[], char *envp[]) {
     pid_t cpid = forkpty(&master, NULL, NULL, &win_size);
     if (0 == cpid) {
         /* In the child process */
-        LOG_DEBUG(g_fs_debug, "%s", ttyname(STDIN_FILENO));
+        LOG_DEBUG("%s", ttyname(STDIN_FILENO));
         /* Restore original signal mask */
         sigprocmask(SIG_SETMASK, &orig_set, NULL);
         /* Execute the shell process. */
         char *shell = get_shell_name();
         if (NULL != shell) {
-            LOG_DEBUG(g_fs_debug, "%s", shell);
+            LOG_DEBUG( "%s", shell);
             char *shell_argp[] = {shell, NULL};
             execve(shell, shell_argp, envp);
         }
         /* If we got that far, it means that execve() failed. We log an error and bail out */
-        LOG_DEBUG(g_fs_debug, "%d %s", errno, strerror(errno));
+        LOG_DEBUG("%d %s", errno, strerror(errno));
         exit(EXIT_FAILURE);
     } else if (cpid > 0) {
         /* In the parent process */
         int status;
-        LOG_DEBUG(g_fs_debug, "isatty(%d)=%d", master, isatty(master));
+        LOG_DEBUG("isatty(%d)=%d", master, isatty(master));
         cfmakeraw(&stdin_data);
         if (0 == tcsetattr(STDIN_FILENO, TCSANOW, &stdin_data)
             && 0 == evutil_make_socket_nonblocking(STDIN_FILENO)
