@@ -1,7 +1,7 @@
 .DEFAULT_GOAL:=all
 .SECONDEXPANSION:
 
-CPPFLAGS	=-MP -MMD -MF $(@D)/$(*).d -MT '$(@D)/$(*).d $(@D)/$(*).o $(@D)/$(*).S $(@D)/$(*).C'
+CPPFLAGS	=-MP -MMD -MF $(@D)/$(*).d -MT '$(@D)/$(*).d $(@D)/$(*).o $(@D)/$(*).S $(@D)/$(*).i'
 CPPFLAGS	+=-DNDEBUG
 CFLAGS		:=-Wall -Wextra -Werror -O0 -ggdb
 LDFLAGS		:=-lutil -levent -L/usr/local/lib
@@ -9,7 +9,7 @@ LDFLAGS		:=-lutil -levent -L/usr/local/lib
 CPPFLAGS	+=-I/usr/local/include
 BUILD_ROOT:=$(shell $(CC) -dumpmachine)/
 
-SOURCES:=pseudoshell.c yandu_log.c
+SOURCES:=pseudoshell.c yandu_log.c nt-vis.c nt-bitmap.c
 OBJECTS:=$(addprefix $(BUILD_ROOT),$(SOURCES:%.c=%.o))
 DEPENDS:=$(OBJECTS:%.o=%.d)
 
