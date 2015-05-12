@@ -34,11 +34,11 @@ struct nt_bitmap {
 };
 
 nt_bitmap_t nt_bitmap_create(unsigned int n_size) {
-    struct nt_bitmap* ret_val = NULL;
+    struct nt_bitmap *ret_val = NULL;
     if (n_size > 0) {
         unsigned long arr_size = 1 + (n_size - 1) / (8 * sizeof(unsigned long));
         ret_val =
-            (struct nt_bitmap*)malloc(sizeof(struct nt_bitmap) + sizeof(unsigned long) * arr_size);
+            (struct nt_bitmap *)malloc(sizeof(struct nt_bitmap) + sizeof(unsigned long) * arr_size);
         if (NULL != ret_val) {
             memset(&ret_val->bitmap_[0], 0, sizeof(unsigned long) * arr_size);
             ret_val->size_ = arr_size;
@@ -100,7 +100,7 @@ unsigned long nt_bitmap_set(nt_bitmap_t a_bitmap, unsigned short idx) {
 
 unsigned short nt_bitmap_size(nt_bitmap_t_c a_bitmap) { return a_bitmap->size_; }
 
-void nt_bitmap_dump(nt_bitmap_t_c a_bitmap, FILE* out) {
+void nt_bitmap_dump(nt_bitmap_t_c a_bitmap, FILE *out) {
     unsigned short idx;
     fprintf(out, "%6hu ", a_bitmap->size_);
     for (idx = 0; idx < a_bitmap->size_; ++idx) {

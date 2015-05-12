@@ -3,7 +3,7 @@
 
 CPPFLAGS	=-MP -MMD -MF $(@D)/$(*).d -MT '$(@D)/$(*).d $(@D)/$(*).o $(@D)/$(*).S $(@D)/$(*).i'
 CPPFLAGS	+=-DNDEBUG
-CFLAGS		:=-Wall -Wextra -Werror -O0 -ggdb
+CFLAGS		:=-Wall -Wextra -O0 -ggdb
 LDFLAGS		:=-lutil -levent -L/usr/local/lib
 
 CPPFLAGS	+=-I/usr/local/include
